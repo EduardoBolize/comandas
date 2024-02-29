@@ -129,7 +129,13 @@ app.get('/', (req, res) => {
                 <ul>
                     ${comandas
                         .filter(comanda => comanda.status === 'aberta')
-                        .map(comanda => `<li><a class="comandas-link" href="/comandas/${comanda.id}">${comanda.nomeCliente} - Valor Total: R$ ${calcularValorTotal(comanda)}</a></li>`).join('')
+                        .map(comanda => `
+                            <li>
+                                <a class="comandas-link" href="/comandas/${comanda.id}">${comanda.nomeCliente} - Valor Total: R$ ${calcularValorTotal(comanda)}</a>
+                                <button onclick="alterarComanda('${comanda.id}')">Alterar</button>
+                                <button onclick="excluirComanda('${comanda.id}')">Excluir</button>
+                            </li>
+                        `).join('')
                     }
                 </ul>
             </div>
@@ -149,11 +155,68 @@ app.get('/', (req, res) => {
                 <ul>
                     ${comandas
                         .filter(comanda => comanda.status === 'fechada')
-                        .map(comanda => `<li><a class="comandas-link fechada" href="/comandas/${comanda.id}">${comanda.nomeCliente} - Fechada - Valor Total: R$ ${calcularValorTotal(comanda)}</a></li>`).join('')
+                        .map(comanda => `
+                            <li>
+                                <a class="comandas-link fechada" href="/comandas/${comanda.id}">${comanda.nomeCliente} - Fechada - Valor Total: R$ ${calcularValorTotal(comanda)}</a>
+                                <button onclick="alterarComanda('${comanda.id}')">Alterar</button>
+                                <button onclick="excluirComanda('${comanda.id}')">Excluir</button>
+                            </li>
+                        `).join('')
                     }
                 </ul>
             </div>
         </div>
+        <script>
+            // Função para alterar uma comanda
+            function alterarComanda(idComanda) {
+                // Novo nome que será solicitado ao usuário
+                const novoNome = prompt('Digite o novo nome da comanda:');
+                if (novoNome !== null && novoNome.trim() !== '') {
+                    // Enviar uma requisição PUT para a rota de alterar comanda, passando o ID da comanda e o novo nome
+                    fetch('/comandas/' + idComanda + '/nome', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ novoNome })
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            // Se a resposta for bem-sucedida, recarregar a página para exibir o novo nome
+                            window.location.reload();
+                        } else {
+                            console.error('Erro ao alterar o nome da comanda:', response.status);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro ao alterar o nome da comanda:', error);
+                    });
+                }
+            }
+
+            // Função para excluir uma comanda com confirmação
+            function excluirComanda(idComanda) {
+                // Exibir uma mensagem de confirmação ao usuário
+                const confirmacao = confirm('Tem certeza que deseja excluir esta comanda?');
+                if (confirmacao) {
+                    // Enviar uma requisição DELETE para a rota de exclusão de comanda
+                    fetch('/excluir-comanda/' + idComanda, {
+                        method: 'DELETE'
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            // Atualizar a página após a exclusão da comanda
+                            window.location.reload();
+                        } else {
+                            console.error('Erro ao excluir a comanda:', response.status);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro ao excluir a comanda:', error);
+                    });
+                }
+            }
+        </script>
     `);
 });
 
@@ -378,8 +441,6 @@ app.get('/comandas/:idComanda', (req, res) => {
     `);
 });
 
-
-
 // Rota para reabrir uma comanda fechada
 app.post('/comandas/:idComanda/reabrir', (req, res) => {
     const { idComanda } = req.params;
@@ -585,11 +646,6 @@ app.get('/exportar', (req, res) => {
     });
 });
 
-// Execute a função de exportação de comandas automaticamente a cada uma hora
-setInterval(() => {
-    exportarComandasParaTxt();
-}, 60 * 60 * 1000); // 1 hora em milissegundos
-
 // Rota para alterar o nome de uma comanda
 app.put('/comandas/:idComanda/nome', (req, res) => {
     const { idComanda } = req.params;
@@ -629,6 +685,24 @@ app.put('/comandas/:idComanda/metodo-pagamento', (req, res) => {
     comanda.metodoPagamento = novoMetodo;
     res.send('Método de pagamento da comanda alterado com sucesso');
 });
+
+app.delete('/excluir-comanda/:idComanda', (req, res) => {
+    const { idComanda } = req.params;
+
+    // Aqui você precisa implementar a lógica para excluir a comanda com o ID fornecido
+    // Por exemplo, você pode ter um array de comandas e remover a comanda com o ID correspondente
+    // Vou fornecer um exemplo simplificado usando um array de comandas:
+
+    const index = comandas.findIndex(comanda => comanda.id === idComanda);
+    if (index !== -1) {
+        // Remove a comanda do array
+        comandas.splice(index, 1);
+        res.sendStatus(204); // Envie uma resposta indicando que a comanda foi excluída com sucesso
+    } else {
+        res.status(404).send('Comanda não encontrada'); // Se a comanda não for encontrada, envie uma resposta 404
+    }
+});
+
 
 // Função para definir a cor da comanda fechada de acordo com o método de pagamento
 function definirCorComanda(comanda) {

@@ -1,0 +1,11 @@
+Comanda de Miguel - Valor Total: R$ 40.00 - Método de Pagamento: dinheiro
+Hambúrguer (Quantidade: 1) - R$ 15.00
+Strong Mint (Quantidade: 2) - R$ 10.00
+Hambúrguer (Quantidade: 1) - R$ 15.00
+
+Total Vendido: R$ 40.00
+Total por Forma de Pagamento:
+dinheiro: R$ 40.00
+pix: R$ 0.00
+cartao_credito: R$ 0.00
+debito: R$ 0.00
