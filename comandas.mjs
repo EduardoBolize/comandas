@@ -121,24 +121,58 @@ app.get('/', (req, res) => {
             .comandas-form button:hover {
                 background-color: #45a049;
             }
+            .comanda-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+            .comanda-info {
+                flex-grow: 1;
+            }
+            .comanda-actions {
+                margin-left: 10px;
+            }
+            .action-button {
+                background-color: #4CAF50;
+                color: white;
+                padding: 5px 10px;
+                border: none;
+                cursor: pointer;
+                border-radius: 5px;
+                transition: background-color 0.3s;
+            }
+            .action-button:hover {
+                background-color: #45a049;
+            }
+            .action-button.alterar {
+                background-color: #dddd16;
+            }
+            .action-button.excluir {
+                background-color: #e31b1b;
+            }            
         </style>
         <h1>Comandas</h1>
         <div class="comandas-container">
-            <div class="comandas-col">
-                <h2>Comandas Abertas</h2>
-                <ul>
-                    ${comandas
-                        .filter(comanda => comanda.status === 'aberta')
-                        .map(comanda => `
-                            <li>
+        <div class="comandas-col">
+            <h2>Comandas Abertas</h2>
+            <ul>
+                ${comandas
+                    .filter(comanda => comanda.status === 'aberta')
+                    .map(comanda => `
+                        <li class="comanda-item">
+                            <div class="comanda-info">
                                 <a class="comandas-link" href="/comandas/${comanda.id}">${comanda.nomeCliente} - Valor Total: R$ ${calcularValorTotal(comanda)}</a>
-                                <button onclick="alterarComanda('${comanda.id}')">Alterar</button>
-                                <button onclick="excluirComanda('${comanda.id}')">Excluir</button>
-                            </li>
-                        `).join('')
-                    }
-                </ul>
-            </div>
+                            </div>
+                            <div class="comanda-actions">
+                                <button class="action-button alterar" onclick="alterarComanda('${comanda.id}')">Alterar</button>
+                                <button class="action-button excluir" onclick="excluirComanda('${comanda.id}')">Excluir</button>
+                            </div>
+                        </li>
+                    `).join('')
+                }
+            </ul>
+        </div>
             <div class="comandas-form">
                 <h2>Abrir Nova Comanda</h2>
                 <form action="/comandas" method="post">
@@ -539,8 +573,14 @@ app.put('/comandas/:idComanda/fechar', (req, res) => {
 });
 
 // Função para exportar as informações da comanda para um arquivo TXT
+// Função para exportar as informações da comanda para um arquivo TXT
 function exportarParaTxt(comanda) {
     const dataAtual = new Date();
+    const horaAtual = dataAtual.getHours();
+    // Verifica se a hora atual é antes das 4 da manhã
+    if (horaAtual < 4) {
+        dataAtual.setDate(dataAtual.getDate() - 1); // Retrocede um dia
+    }
     const dataFormatada = `${dataAtual.getDate()}-${dataAtual.getMonth() + 1}-${dataAtual.getFullYear()}`;
     const nomeArquivo = `comanda_${comanda.id}_${dataFormatada}.txt`;
     const diretorio = './registros'; // O diretório já está definido diretamente
