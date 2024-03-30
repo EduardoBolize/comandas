@@ -1,9 +1,12 @@
 import express from 'express';
 import fs from 'fs';
+import bodyParser from 'body-parser';
 
 const app = express();
 const PORT = 3000;
 
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -16,6 +19,9 @@ let itensPadrao = [
     { nome: 'Batata Frita', preco: 10 },
     // { nome: 'Outro', preco: null } // Adicionando uma opção "Outro" sem preço definido
 ];
+
+// Defina pagamentoOptions fora do bloco da rota para que esteja disponível em todo o escopo da rota
+const pagamentoOptions = ['dinheiro', 'pix', 'cartao_credito', 'debito'].map(metodo => `<option value="${metodo}">${metodo}</option>`).join('');
 
 // Função para calcular o valor total de uma comanda
 function calcularValorTotal(comanda) {
@@ -270,6 +276,66 @@ app.post('/comandas', (req, res) => {
     res.redirect('/');
 });
 
+// Rota para rachar a conta da comanda
+app.get('/comandas/:idComanda/rachar', (req, res) => {
+    const { idComanda } = req.params;
+    const comanda = comandas.find(comanda => comanda.id === idComanda);
+    if (!comanda) {
+        return res.status(404).send('Comanda não encontrada');
+    }
+
+    // Renderiza a página para rachar a conta
+    res.send(`
+        <h1>Rachar Conta</h1>
+        <p>Total da conta: R$ ${calcularValorTotal(comanda).toFixed(2)}</p>
+        <form action="/comandas/${idComanda}/pagar" method="post">
+            <label for="valorPagar">Valor a Pagar:</label>
+            <input type="number" name="valorPagar" id="valorPagar" min="0.01" max="${calcularValorTotal(comanda).toFixed(2)}" step="0.01" required>
+            <label for="metodoPagamento">Forma de Pagamento:</label>
+            <select name="metodoPagamento" id="metodoPagamento">
+                ${pagamentoOptions}
+            </select>
+            <button type="submit">Pagar</button>
+        </form>
+    `);
+});
+
+
+// Rota para pagar uma parte da conta
+app.post('/comandas/:idComanda/pagar', (req, res) => {
+    const { idComanda } = req.params;
+    const comanda = comandas.find(comanda => comanda.id === idComanda && comanda.status === 'aberta');
+    if (!comanda) {
+        return res.status(404).send('Comanda não encontrada ou não está aberta');
+    }
+
+    // Obtém o valor a pagar e a forma de pagamento
+    const valorPagar = parseFloat(req.body.valorPagar);
+    const metodoPagamento = req.body.metodoPagamento;
+
+    // Verifica se o valor a pagar é válido
+    if (isNaN(valorPagar) || valorPagar <= 0) {
+        return res.status(400).send('Valor a pagar inválido');
+    }
+
+    // Verifica se o valor a pagar não excede o valor total da comanda
+    const valorTotal = calcularValorTotal(comanda);
+    if (valorPagar > valorTotal) {
+        return res.status(400).send('Valor a pagar excede o total da conta');
+    }
+
+    // Garante que a propriedade pagamentos seja um array
+    comanda.pagamentos = comanda.pagamentos || [];
+
+    // Atualiza o valor total da comanda
+    comanda.valorTotal -= valorPagar;
+
+    // Adiciona o pagamento à lista de pagamentos da comanda
+    comanda.pagamentos.push({ valor: valorPagar, metodoPagamento });
+
+    res.redirect(`/comandas/${idComanda}/rachar`);
+});
+
 // Rota para visualizar o formulário de alteração de um item da comanda
 app.get('/comandas/:idComanda/itens/:idItem/editar', (req, res) => {
     const { idComanda, idItem } = req.params;
@@ -312,7 +378,7 @@ app.post('/comandas/:idComanda/itens/:idItem/atualizar', (req, res) => {
 });
 
 
-// Rota para visualizar uma comanda específica (incluindo comandas fechadas)
+// Rota para exibir uma comanda e opções para rachar a conta
 app.get('/comandas/:idComanda', (req, res) => {
     const { idComanda } = req.params;
     const comanda = comandas.find(comanda => comanda.id === idComanda);
@@ -327,6 +393,7 @@ app.get('/comandas/:idComanda', (req, res) => {
 
     res.send(`
         <style>
+            /* Estilos CSS atualizados */
             body {
                 font-family: Arial, sans-serif;
                 text-align: center;
@@ -359,7 +426,7 @@ app.get('/comandas/:idComanda', (req, res) => {
             .comanda-link:hover {
                 background-color: #45a049;
             }
-            button, a {
+            button, a, input[type="submit"] {
                 background-color: #4CAF50;
                 color: white;
                 padding: 10px 20px;
@@ -368,8 +435,9 @@ app.get('/comandas/:idComanda', (req, res) => {
                 cursor: pointer;
                 border-radius: 5px;
                 text-decoration: none;
+                display: inline-block;
             }
-            button:hover, a:hover {
+            button:hover, a:hover, input[type="submit"]:hover {
                 background-color: #45a049;
             }
             form {
@@ -430,17 +498,22 @@ app.get('/comandas/:idComanda', (req, res) => {
                 </form>
             </div>
             <div class="coluna">
-                <h2>Fechar Comanda</h2>
-                <form action="/comandas/${idComanda}/fechar" method="post">
-                    <label for="metodoPagamento">Método de Pagamento:</label>
+                <h2>Pagar Conta</h2>
+                <form action="/comandas/${idComanda}/pagar" method="post">
+                    <label for="valorPagar">Valor Total a Pagar:</label>
+                    <input type="number" name="valorPagar" id="valorPagar" value="${calcularValorTotal(comanda).toFixed(2)}" min="0.01" step="0.01" readonly>
+                    <label for="metodoPagamento">Forma de Pagamento:</label>
                     <select name="metodoPagamento" id="metodoPagamento">
                         ${pagamentoOptions}
                     </select>
-                    <button type="submit">Fechar Comanda</button>
+                    <button type="submit">Pagar</button>
                 </form>
                 ${comanda.status === 'fechada' ? `<form action="/comandas/${idComanda}/reabrir" method="post">
                     <button type="submit">Reabrir Comanda</button>
                 </form>` : ''}
+                <form action="/comandas/${idComanda}/rachar" method="get">
+                    <button type="submit">Pagar em Mais de uma Forma</button>
+                </form>
             </div>
         </div>
         <br>
@@ -474,6 +547,126 @@ app.get('/comandas/:idComanda', (req, res) => {
         </script>
     `);
 });
+
+app.post('/comandas/:idComanda/rachar', (req, res) => {
+    const { idComanda } = req.params;
+    const comanda = comandas.find(comanda => comanda.id === idComanda);
+    if (!comanda || comanda.status !== 'fechada') {
+        return res.status(404).send('Comanda não encontrada ou não está fechada');
+    }
+
+    const valorTotalComanda = calcularValorTotal(comanda);
+    const pagamentoOptions = ['dinheiro', 'pix', 'cartao_credito', 'debito'].map(metodo => `<option value="${metodo}">${metodo}</option>`).join('');
+
+    res.send(`
+        <h1>Rachar Conta</h1>
+        <<p>A conta da comanda ${idComanda} tem um total de R$ ${valorTotalComanda.toFixed(2)}.</p>
+        <form action="/comandas/${idComanda}/pagar" method="post">
+            <div id="pagamentos-container">
+                <div class="pagamento">
+                    <label for="valor1">Valor:</label>
+                    <input type="number" name="valor1" id="valor1" min="0.01" step="0.01" max="${valorTotalComanda.toFixed(2)}" required>
+                    <label for="metodoPagamento1">Método de Pagamento:</label>
+                    <select name="metodoPagamento1" id="metodoPagamento1">
+                        ${pagamentoOptions}
+                    </select>
+                </div>
+            </div>
+            <button type="button" id="adicionar-pagamento">Pagar em mais de uma forma</button>
+            <button type="submit">Pagar</button>
+        </form>
+        <form action="/comandas/${idComanda}/rachar" method="post">
+            <button type="submit">Rachar Conta</button>
+        </form>
+        <script>
+            document.getElementById('adicionar-pagamento').addEventListener('click', () => {
+                const pagamentosContainer = document.getElementById('pagamentos-container');
+                const numPagamentos = pagamentosContainer.children.length;
+                const novoPagamento = document.createElement('div');
+                novoPagamento.classList.add('pagamento');
+                novoPagamento.innerHTML = '
+                    <label for="valor${numPagamentos + 1}">Valor:</label>
+                    <input type="number" name="valor${numPagamentos + 1}" id="valor${numPagamentos + 1}" min="0.01" step="0.01" max="${(valorTotalComanda - somaValoresPagos()).toFixed(2)}" required>
+                    <label for="metodoPagamento${numPagamentos + 1}">Método de Pagamento:</label>
+                    <select name="metodoPagamento${numPagamentos + 1}" id="metodoPagamento${numPagamentos + 1}">
+                        ${pagamentoOptions}
+                    </select>
+                ';
+                pagamentosContainer.appendChild(novoPagamento);
+            });
+
+            function somaValoresPagos() {
+                let soma = 0;
+                document.querySelectorAll('[name^="valor"]').forEach(input => {
+                    soma += parseFloat(input.value);
+                });
+                return soma;
+            }
+        </script>
+    `);
+});
+
+app.post('/comandas/:idComanda/pagar', (req, res) => {
+    const { idComanda } = req.params;
+    // Lógica para fechar a comanda e processar o pagamento
+    res.send('Comanda paga com sucesso!');
+});
+
+app.post('/comandas/:idComanda/pagar', (req, res) => {
+    const { idComanda } = req.params;
+    const comandaIndex = comandas.findIndex(comanda => comanda.id === idComanda);
+
+    if (comandaIndex === -1) {
+        return res.status(404).send('Comanda não encontrada');
+    }
+
+    const comanda = comandas[comandaIndex];
+
+    // Verificando se a comanda está aberta para permitir o pagamento
+    if (comanda.status === 'aberta') {
+        const valorTotalComanda = calcularValorTotal(comanda);
+        let valorPagoTotal = 0;
+
+        // Calculando o valor total já pago
+        if (comanda.hasOwnProperty('pagamentos')) {
+            valorPagoTotal = comanda.pagamentos.reduce((total, pagamento) => total + pagamento.valor, 0);
+        }
+
+        // Pegando os dados dos pagamentos do corpo da requisição
+        for (let i = 1; i <= req.body.numPagamentos; i++) {
+            const valor = parseFloat(req.body[`valor${i}`]);
+            const metodoPagamento = req.body[`metodoPagamento${i}`];
+
+            if (!isNaN(valor) && valor > 0) {
+                // Verificando se o valor do pagamento não excede o valor total da comanda
+                if (valorPagoTotal + valor <= valorTotalComanda) {
+                    if (!comanda.hasOwnProperty('pagamentos')) {
+                        comanda.pagamentos = [];
+                    }
+                    comanda.pagamentos.push({ valor, metodoPagamento });
+                    valorPagoTotal += valor;
+                } else {
+                    return res.status(400).send('O valor do pagamento excede o valor total da comanda');
+                }
+            } else {
+                return res.status(400).send('Valor de pagamento inválido');
+            }
+        }
+
+        // Verificando se o valor total da comanda foi pago
+        if (valorPagoTotal === valorTotalComanda) {
+            // Atualizando o status da comanda para fechada
+            comanda.status = 'fechada';
+            // Redirecionando para a página principal
+            return res.redirect('/');
+        } else {
+            return res.status(400).send('O valor total da comanda ainda não foi pago');
+        }
+    } else {
+        return res.status(400).send('A comanda já está fechada');
+    }
+});
+
 
 // Rota para reabrir uma comanda fechada
 app.post('/comandas/:idComanda/reabrir', (req, res) => {
@@ -573,7 +766,6 @@ app.put('/comandas/:idComanda/fechar', (req, res) => {
 });
 
 // Função para exportar as informações da comanda para um arquivo TXT
-// Função para exportar as informações da comanda para um arquivo TXT
 function exportarParaTxt(comanda) {
     const dataAtual = new Date();
     const horaAtual = dataAtual.getHours();
@@ -585,6 +777,16 @@ function exportarParaTxt(comanda) {
     const nomeArquivo = `comanda_${comanda.id}_${dataFormatada}.txt`;
     const diretorio = './registros'; // O diretório já está definido diretamente
     const caminhoArquivo = path.join(diretorio, nomeArquivo);
+
+    // Verifica se a comanda foi rachada entre várias pessoas
+    if (comanda.numeroPessoas) {
+        conteudo += `Rachado entre ${comanda.numeroPessoas} pessoas\n`;
+    }
+
+    // Verifica se foi utilizada uma segunda forma de pagamento
+    if (comanda.segundoMetodoPagamento) {
+        conteudo += `Segunda Forma de Pagamento: ${comanda.segundoMetodoPagamento}\n`;
+    }
 
     // Escrever informações da comanda no arquivo
     let conteudo = `Comanda de ${comanda.nomeCliente}`;
