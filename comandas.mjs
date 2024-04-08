@@ -276,7 +276,6 @@ app.post('/comandas', (req, res) => {
     res.redirect('/');
 });
 
-// Rota para rachar a conta da comanda
 app.get('/comandas/:idComanda/rachar', (req, res) => {
     const { idComanda } = req.params;
     const comanda = comandas.find(comanda => comanda.id === idComanda);
@@ -284,13 +283,27 @@ app.get('/comandas/:idComanda/rachar', (req, res) => {
         return res.status(404).send('Comanda não encontrada');
     }
 
-    // Renderiza a página para rachar a conta
+    // Calcular o valor total da conta e o valor já pago
+    const valorTotal = calcularValorTotal(comanda);
+    const valorPago = comanda.pagamentos ? comanda.pagamentos.reduce((total, pagamento) => total + pagamento.valor, 0) : 0;
+
+    // Verificar se o valor total da conta já foi totalmente pago
+    if (valorPago >= valorTotal) {
+        return res.send('Conta já foi totalmente paga');
+    }
+
+    // Calcular o valor restante a ser pago
+    const valorRestante = valorTotal - valorPago;
+
+    // Renderizar o formulário para pagar o valor restante
     res.send(`
         <h1>Rachar Conta</h1>
-        <p>Total da conta: R$ ${calcularValorTotal(comanda).toFixed(2)}</p>
+        <p>Total da conta: R$ ${valorTotal.toFixed(2)}</p>
+        <p>Valor já pago: R$ ${valorPago.toFixed(2)}</p>
+        <p>Valor restante: R$ ${valorRestante.toFixed(2)}</p>
         <form action="/comandas/${idComanda}/pagar" method="post">
             <label for="valorPagar">Valor a Pagar:</label>
-            <input type="number" name="valorPagar" id="valorPagar" min="0.01" max="${calcularValorTotal(comanda).toFixed(2)}" step="0.01" required>
+            <input type="number" name="valorPagar" id="valorPagar" min="0.01" max="${valorRestante.toFixed(2)}" step="0.01" required>
             <label for="metodoPagamento">Forma de Pagamento:</label>
             <select name="metodoPagamento" id="metodoPagamento">
                 ${pagamentoOptions}
@@ -300,41 +313,51 @@ app.get('/comandas/:idComanda/rachar', (req, res) => {
     `);
 });
 
-
-// Rota para pagar uma parte da conta
+// Rota para pagar parte da conta
 app.post('/comandas/:idComanda/pagar', (req, res) => {
     const { idComanda } = req.params;
-    const comanda = comandas.find(comanda => comanda.id === idComanda && comanda.status === 'aberta');
+    const { valorPagar, metodoPagamento } = req.body;
+    const comanda = comandas.find(comanda => comanda.id === idComanda);
+    
     if (!comanda) {
-        return res.status(404).send('Comanda não encontrada ou não está aberta');
+        return res.status(404).send('Comanda não encontrada');
     }
 
-    // Obtém o valor a pagar e a forma de pagamento
-    const valorPagar = parseFloat(req.body.valorPagar);
-    const metodoPagamento = req.body.metodoPagamento;
-
-    // Verifica se o valor a pagar é válido
-    if (isNaN(valorPagar) || valorPagar <= 0) {
-        return res.status(400).send('Valor a pagar inválido');
+    // Verifica se o valor a pagar é maior que o valor restante na comanda
+    const valorRestante = calcularValorRestante(comanda);
+    if (parseFloat(valorPagar) > parseFloat(valorRestante)) {
+        return res.status(400).send('Valor a pagar excede o valor restante na comanda');
     }
 
-    // Verifica se o valor a pagar não excede o valor total da comanda
-    const valorTotal = calcularValorTotal(comanda);
-    if (valorPagar > valorTotal) {
-        return res.status(400).send('Valor a pagar excede o total da conta');
+    // Adiciona o pagamento à comanda
+    if (!comanda.pagamentos) {
+        comanda.pagamentos = [];
+    }
+    comanda.pagamentos.push({
+        valor: parseFloat(valorPagar),
+        metodo: metodoPagamento
+    });
+
+    // Se o valor pago for igual ao valor total da comanda, redirecione para a página inicial
+    if (parseFloat(valorPagar) === parseFloat(comanda.valorTotal)) {
+        // Aqui você pode redirecionar para a tela inicial com a comanda fechada
+        return res.redirect('/');
     }
 
-    // Garante que a propriedade pagamentos seja um array
-    comanda.pagamentos = comanda.pagamentos || [];
-
-    // Atualiza o valor total da comanda
-    comanda.valorTotal -= valorPagar;
-
-    // Adiciona o pagamento à lista de pagamentos da comanda
-    comanda.pagamentos.push({ valor: valorPagar, metodoPagamento });
-
+    // Se o valor pago for menor que o valor total da comanda, atualize a página de rachar conta
     res.redirect(`/comandas/${idComanda}/rachar`);
 });
+
+// Função para calcular o valor restante na comanda
+function calcularValorRestante(comanda) {
+    if (!comanda.pagamentos) {
+        return comanda.valorTotal;
+    }
+    
+    const totalPago = comanda.pagamentos.reduce((total, pagamento) => total + pagamento.valor, 0);
+    return comanda.valorTotal - totalPago;
+}
+
 
 // Rota para visualizar o formulário de alteração de um item da comanda
 app.get('/comandas/:idComanda/itens/:idItem/editar', (req, res) => {
@@ -499,7 +522,7 @@ app.get('/comandas/:idComanda', (req, res) => {
             </div>
             <div class="coluna">
                 <h2>Pagar Conta</h2>
-                <form action="/comandas/${idComanda}/pagar" method="post">
+                <form action="/comandas/${idComanda}/fechar" method="post">
                     <label for="valorPagar">Valor Total a Pagar:</label>
                     <input type="number" name="valorPagar" id="valorPagar" value="${calcularValorTotal(comanda).toFixed(2)}" min="0.01" step="0.01" readonly>
                     <label for="metodoPagamento">Forma de Pagamento:</label>
@@ -741,29 +764,19 @@ app.post('/comandas/:idComanda/fechar', (req, res) => {
         return res.status(404).send('Comanda não encontrada ou já fechada');
     }
 
-    // Atualiza o status da comanda para fechada e define o método de pagamento
-    comanda.status = 'fechada';
-    comanda.metodoPagamento = metodoPagamento;
-
-    res.redirect('/');
-});
-
-// Rota para fechar uma comanda
-app.put('/comandas/:idComanda/fechar', (req, res) => {
-    const { idComanda } = req.params;
-    const { metodoPagamento } = req.body;
-    const comanda = comandas.find(comanda => comanda.id === idComanda && comanda.status === 'aberta');
-    if (!comanda) {
-        return res.status(404).send('Comanda não encontrada ou já fechada');
-    }
-
     // Salva o valor total vendido e o método de pagamento
     comanda.status = 'fechada';
     comanda.metodoPagamento = metodoPagamento;
     const valorTotalVendido = comanda.valorTotal;
+
     // Aqui você pode adicionar lógica para exportar os dados para um arquivo txt
-    res.send(`Comanda fechada. Valor Total: R$ ${valorTotalVendido}. Método de Pagamento: ${metodoPagamento}`);
+
+    // Redireciona o usuário de volta para a página inicial após fechar a comanda
+    res.redirect('/'); // Redireciona para a página inicial
+
+    // res.send(`Comanda fechada. Valor Total: R$ ${valorTotalVendido}. Método de Pagamento: ${metodoPagamento}`);
 });
+
 
 // Função para exportar as informações da comanda para um arquivo TXT
 function exportarParaTxt(comanda) {
