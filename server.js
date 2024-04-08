@@ -1,7 +1,4 @@
 import express from 'express';
-import fs from 'fs';
-import path from 'path';
-
 const app = express();
 const PORT = 3000;
 
@@ -1167,8 +1164,9 @@ app.get('/comandas/:idComanda/itens/:idItem/remover', (req, res) => {
     res.redirect(`/comandas/${idComanda}`);
 });
 
-
 // Inicia o servidor
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
+
+export default app; // Exporta o app para uso em outros arquivos
