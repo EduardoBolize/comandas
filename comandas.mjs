@@ -1,35 +1,29 @@
 import express from 'express';
 import fs from 'fs';
-import bodyParser from 'body-parser';
+import path from 'path';
 
 const app = express();
 const PORT = 3000;
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// Middleware para parsing de JSON e URL-encoded bodies
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 let comandas = [];
 
-let itensPadrao = [
+const itensPadrao = [
     { nome: 'Strong Mint', preco: 5 },
     { nome: 'Pizza', preco: 20 },
     { nome: 'Hambúrguer', preco: 15 },
-    { nome: 'Batata Frita', preco: 10 },
-    // { nome: 'Outro', preco: null } // Adicionando uma opção "Outro" sem preço definido
+    { nome: 'Batata Frita', preco: 10 }
 ];
 
-// Defina pagamentoOptions fora do bloco da rota para que esteja disponível em todo o escopo da rota
-const pagamentoOptions = ['dinheiro', 'pix', 'cartao_credito', 'debito'].map(metodo => `<option value="${metodo}">${metodo}</option>`).join('');
+const pagamentoOptions = ['Dinheiro', 'PIX', 'Crédito', 'Débito']
+    .map(metodo => `<option value="${metodo}">${metodo}</option>`).join('');
 
 // Função para calcular o valor total de uma comanda
 function calcularValorTotal(comanda) {
-    let total = 0;
-    for (const item of comanda.itens) {
-        total += item.preco * item.quantidade; // Adiciona o preço total de cada item ao total da comanda
-    }
-    return total;
+    return comanda.itens.reduce((total, item) => total + item.preco * item.quantidade, 0);
 }
 
 // Rota raiz - Página inicial com lista de comandas abertas e formulário para abrir nova comanda
@@ -37,12 +31,15 @@ app.get('/', (req, res) => {
     res.send(`
         <style>
             body {
-                font-family: Arial, sans-serif;
+                font-family: 'Roboto', sans-serif;
                 text-align: center;
+                background: #e0e0e0; /* Cor de fundo mais suave */
+                color: #333; /* Texto escuro para melhor leitura */
+                padding: 20px;
             }
             h1 {
-                margin-top: 2.5%;
-                margin-bottom: 2.5%;
+                color: #4CAF50; /* Cor verde para títulos */
+                margin-bottom: 20px;
             }
             .comandas-container {
                 display: flex;
@@ -53,119 +50,191 @@ app.get('/', (req, res) => {
             .comandas-col {
                 flex: 1;
                 text-align: left;
-                background-color: #f2f2f2;
-                border-radius: 5px;
-                padding: 10px;
-                margin-right: 10px; /* Adiciona um espaço entre as colunas */
+                background-color: #fff; /* Fundo branco para as colunas */
+                border: 1px solid #ddd; /* Borda sutil */
+                border-radius: 8px;
+                padding: 20px;
+                margin-right: 10px; /* Espaço entre as colunas */
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* Sombra sutil */
             }
             .comandas-col:last-child {
-                margin-right: 0; /* Remove o espaço da última coluna */
+                margin-right: 0;
             }
-            .comandas-col:hover {
-                background-color: #e0e0e0;
-            }
-            .comandas-col h2 {
-                margin-bottom: 10px;
-            }
-            .comandas-col ul {
-                list-style-type: none;
-                padding: 0;
-            }
-            .comandas-col li {
-                margin-bottom: 5px;
-            }
-            .comandas-link {
+            .comandas-link, .comandas-form button {
                 display: block;
                 background-color: #4CAF50;
                 color: white;
-                padding: 10px 20px;
+                padding: 12px 24px;
                 margin-bottom: 10px;
+                border-radius: 8px;
+                text-decoration: none;
                 border: none;
                 cursor: pointer;
-                border-radius: 5px;
-                text-decoration: none;
                 transition: background-color 0.3s;
+                text-align: center;
             }
-            .comandas-link:hover {
-                background-color: #45a049;
+            .comandas-link:hover, .comandas-form button:hover {
+                background-color: #45a049; /* Verde mais escuro ao passar o mouse */
             }
-            .comandas-link.fechada {
-                background-color: #FF5733;
-            }
-            .comandas-link.fechada:hover {
-                background-color: #e74c3c;
+            .comandas-link.fechada, .comandas-link.fechada:hover {
+                background-color: #FF5733; /* Vermelho para comandas fechadas */
+                background-color: #e74c3c; /* Vermelho mais claro ao passar o mouse */
             }
             .comandas-form {
-                flex: 0 0 40%; /* Largura fixa para o formulário */
+                flex: 0 0 40%;
                 text-align: left;
             }
-            .comandas-form h2 {
-                margin-bottom: 10px;
-            }
-            .comandas-form form {
-                display: flex;
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .comandas-form label {
-                margin-bottom: 5px;
-            }
-            .comandas-form input[type="text"] {
-                padding: 5px;
+            .comandas-form input[type="text"], .comandas-form select {
                 width: 100%;
-                margin-bottom: 10px;
-            }
-            .comandas-form button {
-                background-color: #4CAF50;
-                color: white;
-                padding: 10px 20px;
-                border: none;
-                cursor: pointer;
-                border-radius: 5px;
-                transition: background-color 0.3s;
-            }
-            .comandas-form button:hover {
-                background-color: #45a049;
-            }
-            .comanda-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 10px;
-            }
-            .comanda-info {
-                flex-grow: 1;
-            }
-            .comanda-actions {
-                margin-left: 10px;
+                padding: 8px;
+                margin-bottom: 20px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
             }
             .action-button {
                 background-color: #4CAF50;
                 color: white;
                 padding: 5px 10px;
                 border: none;
-                cursor: pointer;
-                border-radius: 5px;
+                border-radius: 4px;
                 transition: background-color 0.3s;
             }
             .action-button:hover {
                 background-color: #45a049;
             }
             .action-button.alterar {
-                background-color: #dddd16;
+                background-color: #dddd16; /* Amarelo para botões de alterar */
             }
             .action-button.excluir {
-                background-color: #e31b1b;
-            }            
+                background-color: #e31b1b; /* Vermelho para botões de excluir */
+            }
+            .modal {
+                display: none; /* Escondido por padrão */
+                position: fixed; /* Fica fixo na tela */
+                z-index: 2; /* Sita-se sobre tudo, exceto o modal */
+                left: 0;
+                top: 0;
+                width: 100%; /* Largura total */
+                height: 100%; /* Altura total */
+                background-color: rgba(0,0,0,0.5); /* Preto com opacidade para escurecer a tela */
+                overflow: auto; /* Permite rolagem se necessário */
+            }
+        
+            /* Conteúdo do Modal */
+            .modal-content {
+                position: relative;
+                background-color: #ffffff;
+                margin: 10% auto; /* 10% do topo e centralizado horizontalmente */
+                padding: 20px;
+                border: 1px solid #ccc;
+                width: 50%; /* 50% da largura da tela */
+                box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+                animation-name: animatetop;
+                animation-duration: 0.4s
+            }
+        
+            /* Adiciona animação */
+            @keyframes animatetop {
+                from {top: -300px; opacity: 0}
+                to {top: 0; opacity: 1}
+            }
+        
+            /* Botão para fechar o modal */
+            .close {
+                color: #aaaaaa;
+                float: right;
+                font-size: 28px;
+                font-weight: bold;
+                margin-right: -10px;
+                margin-top: -10px;
+            }
+        
+            .close:hover,
+            .close:focus {
+                color: #000;
+                text-decoration: none;
+                cursor: pointer;
+            }
+        
+            /* Ajustes no botão */
+            .modal-footer {
+                padding: 12px 16px;
+                text-align: right;
+                border-top: 1px solid #e5e5e5;
+            }
+        
+            .modal-footer button {
+                padding: 10px 20px;
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: background-color 0.3s;
+            }
+        
+            .modal-footer button:hover {
+                background-color: #45a049;
+            }
+
+            /* Media Queries para Responsividade */
+            @media only screen and (max-width: 480px) {
+                body {
+                    padding: 10px; /* Reduzir o padding geral para mais espaço de tela */
+                    font-size: 14px; /* Ajustar o tamanho da fonte geral para melhor legibilidade */
+                }
+        
+                h1, .comandas-link, .comandas-form button, .action-button {
+                    font-size: 16px; /* Tamanho da fonte maior para legibilidade */
+                }
+        
+                .comandas-container {
+                    flex-direction: column; /* Colunas em bloco, uma abaixo da outra */
+                }
+        
+                .comandas-col, .comandas-form {
+                    width: 100%; /* Cada coluna usa 100% da largura da tela */
+                    margin-right: 0;
+                    margin-bottom: 10px; /* Adiciona margem abaixo */
+                    box-shadow: none; /* Remove sombra para teste */
+                }
+            
+                .comandas-form button, .action-button {
+                    font-size: 16px; /* Aumento do tamanho da fonte para botões */
+                    padding: 12px 24px; /* Maior área de clique */
+                }
+        
+                /* Estilos do modal ajustados para melhor visualização em smartphones */
+                .modal-content {
+                    width: 95%; /* Modal quase a largura total para aproveitar o espaço */
+                    margin-top: 50px; /* Menos margem superior para que apareça mais centralizado */
+                    padding: 15px; /* Padding interno reduzido */
+                }
+        
+                .modal-footer {
+                    padding: 10px; /* Padding reduzido no rodapé do modal */
+                }
+        
+                .modal-footer button {
+                    font-size: 14px; /* Ajuste no tamanho da fonte do botão no rodapé do modal */
+                }
+            }
         </style>
+        <!-- O Modal -->
+        <div id="myModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <p id="modalText">Some text in the Modal..</p>
+            </div>
+        </div>
         <h1>Comandas</h1>
         <div class="comandas-container">
         <div class="comandas-col">
             <h2>Comandas Abertas</h2>
             <ul>
                 ${comandas
-                    .filter(comanda => comanda.status === 'aberta')
-                    .map(comanda => `
+            .filter(comanda => comanda.status === 'aberta')
+            .map(comanda => `
                         <li class="comanda-item">
                             <div class="comanda-info">
                                 <a class="comandas-link" href="/comandas/${comanda.id}">${comanda.nomeCliente} - Valor Total: R$ ${calcularValorTotal(comanda)}</a>
@@ -187,26 +256,67 @@ app.get('/', (req, res) => {
                     <button type="submit">Abrir Comanda</button>
                 </form>
                 <form action="/exportar" method="get">
-                    <button type="submit">Exportar para TXT</button>
+                    <button id="exportBtn">Exportar Dados</button>
                 </form>
             </div>
             <div class="comandas-col">
                 <h2>Comandas Fechadas</h2>
                 <ul>
                     ${comandas
-                        .filter(comanda => comanda.status === 'fechada')
-                        .map(comanda => `
+            .filter(comanda => comanda.status === 'fechada')
+            .map(comanda => `
                             <li>
                                 <a class="comandas-link fechada" href="/comandas/${comanda.id}">${comanda.nomeCliente} - Fechada - Valor Total: R$ ${calcularValorTotal(comanda)}</a>
                                 <button onclick="alterarComanda('${comanda.id}')">Alterar</button>
                                 <button onclick="excluirComanda('${comanda.id}')">Excluir</button>
                             </li>
                         `).join('')
-                    }
+        }
                 </ul>
             </div>
         </div>
         <script>
+            // Pega o modal
+            var modal = document.getElementById('myModal');
+
+            // Pega o elemento <span> que fecha o modal
+            var span = document.getElementsByClassName("close")[0];
+
+            // Quando o usuário clica no <span> (x), fecha o modal
+            span.onclick = function() {
+                modal.style.display = "none";
+            }
+
+            // Quando o usuário clica em qualquer lugar fora do modal, fecha-o
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+
+            // Função para abrir o modal com uma mensagem
+            function showModal(message) {
+                document.getElementById('modalText').textContent = message;
+                modal.style.display = "block";
+            }
+
+            document.getElementById('exportBtn').addEventListener('click', function(event) {
+                event.preventDefault(); // Impede o comportamento padrão do formulário
+
+                fetch('/exportar')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showModal(data.message); // Exibe o modal com a mensagem de sucesso
+                        } else {
+                            showModal("Falha ao exportar os dados."); // Exibe o modal com a mensagem de falha
+                        }
+                    })
+                    .catch(error => {
+                        showModal("Erro ao exportar: " + error.message); // Exibe o modal com a mensagem de erro
+                    });
+            });
+
             // Função para alterar uma comanda
             function alterarComanda(idComanda) {
                 // Novo nome que será solicitado ao usuário
@@ -297,6 +407,57 @@ app.get('/comandas/:idComanda/rachar', (req, res) => {
 
     // Renderizar o formulário para pagar o valor restante
     res.send(`
+        <style>
+            body {
+                font-family: 'Roboto', sans-serif;
+                text-align: center;
+                background: #e0e0e0; /* Cor de fundo mais suave */
+                color: #333; /* Texto escuro para melhor leitura */
+                padding: 20px;
+            }
+            h1 {
+                color: #4CAF50; /* Cor verde para títulos */
+                margin-bottom: 20px;
+            }
+            p {
+                font-size: 16px;
+                color: #555; /* Texto mais escuro para contraste */
+            }
+            form {
+                background: #ffffff; /* Fundo branco para o formulário */
+                padding: 20px;
+                border-radius: 8px;
+                display: inline-block;
+                border: 1px solid #ccc;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                margin-top: 20px;
+            }
+            label {
+                display: block;
+                margin-bottom: 10px;
+                font-weight: bold;
+            }
+            input[type="number"], select {
+                width: 100%;
+                padding: 8px;
+                margin-bottom: 20px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+            }
+            button {
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: background-color 0.3s;
+                width: 100%;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+        </style>
         <h1>Rachar Conta</h1>
         <p>Total da conta: R$ ${valorTotal.toFixed(2)}</p>
         <p>Valor já pago: R$ ${valorPago.toFixed(2)}</p>
@@ -313,51 +474,45 @@ app.get('/comandas/:idComanda/rachar', (req, res) => {
     `);
 });
 
-// Rota para pagar parte da conta
 app.post('/comandas/:idComanda/pagar', (req, res) => {
     const { idComanda } = req.params;
     const { valorPagar, metodoPagamento } = req.body;
     const comanda = comandas.find(comanda => comanda.id === idComanda);
-    
+
     if (!comanda) {
         return res.status(404).send('Comanda não encontrada');
     }
 
-    // Verifica se o valor a pagar é maior que o valor restante na comanda
-    const valorRestante = calcularValorRestante(comanda);
-    if (parseFloat(valorPagar) > parseFloat(valorRestante)) {
-        return res.status(400).send('Valor a pagar excede o valor restante na comanda');
+    const valorPagarFloat = parseFloat(valorPagar);
+    if (isNaN(valorPagarFloat) || valorPagarFloat <= 0) {
+        return res.status(400).send('Valor a pagar inválido');
     }
 
-    // Adiciona o pagamento à comanda
     if (!comanda.pagamentos) {
         comanda.pagamentos = [];
     }
+
     comanda.pagamentos.push({
-        valor: parseFloat(valorPagar),
+        valor: valorPagarFloat,
         metodo: metodoPagamento
     });
 
-    // Se o valor pago for igual ao valor total da comanda, redirecione para a página inicial
-    if (parseFloat(valorPagar) === parseFloat(comanda.valorTotal)) {
-        // Aqui você pode redirecionar para a tela inicial com a comanda fechada
-        return res.redirect('/');
+    // Redirecionar para a página de rachar conta ou para a página inicial dependendo do saldo restante
+    const valorRestante = calcularValorRestante(comanda);
+    if (valorRestante > 0) {
+        res.redirect(`/comandas/${idComanda}/rachar`);
+    } else {
+        comanda.status = 'fechada';
+        res.redirect('/');
     }
-
-    // Se o valor pago for menor que o valor total da comanda, atualize a página de rachar conta
-    res.redirect(`/comandas/${idComanda}/rachar`);
 });
 
 // Função para calcular o valor restante na comanda
 function calcularValorRestante(comanda) {
-    if (!comanda.pagamentos) {
-        return comanda.valorTotal;
-    }
-    
-    const totalPago = comanda.pagamentos.reduce((total, pagamento) => total + pagamento.valor, 0);
-    return comanda.valorTotal - totalPago;
+    const valorTotal = calcularValorTotal(comanda);
+    const totalPago = comanda.pagamentos ? comanda.pagamentos.reduce((total, pagamento) => total + pagamento.valor, 0) : 0;
+    return valorTotal - totalPago;
 }
-
 
 // Rota para visualizar o formulário de alteração de um item da comanda
 app.get('/comandas/:idComanda/itens/:idItem/editar', (req, res) => {
@@ -412,100 +567,48 @@ app.get('/comandas/:idComanda', (req, res) => {
     let options = itensPadrao.map(item => `<option value="${item.nome}" data-preco="${item.preco}">${item.nome} - R$ ${item.preco}</option>`).join('');
     options += `<option value="Outro" data-preco="">Outro</option>`;
 
-    const pagamentoOptions = ['dinheiro', 'pix', 'cartao_credito', 'debito'].map(metodo => `<option value="${metodo}">${metodo}</option>`).join('');
+    const pagamentoOptions = ['Dinheiro', 'PIX', 'Crédito', 'Débito'].map(metodo => `<option value="${metodo}">${metodo}</option>`).join('');
 
     res.send(`
         <style>
-            /* Estilos CSS atualizados */
-            body {
-                font-family: Arial, sans-serif;
-                text-align: center;
-            }
-            h1 {
-                margin-top: 4%;
-                margin-bottom: 2.5%;
-            }
-            h2 {
-                margin-bottom: 10px;
-            }
-            ul {
-                list-style-type: none;
-                padding: 0;
-            }
-            li {
-                margin-bottom: 5px;
-            }
-            .comanda-link {
-                background-color: #4CAF50;
-                color: white;
-                padding: 10px 20px;
-                margin: 10px;
+            body { font-family: 'Roboto', sans-serif; text-align: center; background: #e0e0e0; color: #333; padding: 20px; }
+            h1, h2 { color: #4CAF50; margin-bottom: 20px; }
+            ul { list-style-type: none; padding: 0; }
+            li { margin-bottom: 5px; font-size: 16px; display: flex; align-items: center; justify-content: space-between; }
+            .container { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; padding: 20px; }
+            .coluna, .coluna-center { flex: 1; min-width: 300px; margin: 0 10px; background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            .comanda-link, button, input[type="submit"] { background-color: #4CAF50; color: white; padding: 12px 24px; margin: 10px; border: none; border-radius: 8px; cursor: pointer; transition: background-color 0.3s; text-decoration: none; display: inline-block; width: auto; }
+            .comanda-link:hover, button:hover, input[type="submit"]:hover { background-color: #45a049; }
+            form { display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
+            label { display: block; margin-bottom: 5px; }
+            select, input[type="number"], input[type="text"] { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+            input[type="number"] { width: auto; }
+            .quantity-btn {
                 border: none;
+                background: none;
                 cursor: pointer;
-                border-radius: 5px;
-                text-decoration: none;
-                display: inline-block;
+                color: #4CAF50; /* Cor verde para combinar com o tema */
             }
-            .comanda-link:hover {
-                background-color: #45a049;
-            }
-            button, a, input[type="submit"] {
-                background-color: #4CAF50;
-                color: white;
-                padding: 10px 20px;
-                margin: 10px;
-                border: none;
-                cursor: pointer;
-                border-radius: 5px;
-                text-decoration: none;
-                display: inline-block;
-            }
-            button:hover, a:hover, input[type="submit"]:hover {
-                background-color: #45a049;
-            }
-            form {
-                display: inline-block;
-                margin-top: 10px;
-            }
-            label {
-                display: block;
-                margin-bottom: 5px;
-            }
-            select, input[type="number"], input[type="text"] {
-                margin-bottom: 10px;
-                padding: 5px;
-            }
-            input[type="number"] {
-                width: 60px;
-            }
-            .container {
-                display: flex;
-                justify-content: space-between;
-                align-items: flex-start;
-                flex-wrap: wrap;
-                padding: 20px;
-            }
-            .coluna {
-                flex: 1;
-                min-width: 300px;
-                margin: 0 10px;
-            }
-            .coluna-center {
-                flex: 1;
-                min-width: 300px;
-                margin: 0 10px;
-                text-align: center;
+            .quantity-btn:hover {
+                color: #45a049;
             }
         </style>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
         <h1>Comanda de ${comanda.nomeCliente}${comanda.status === 'fechada' ? ' - Fechada' : ''}</h1>
         <div class="container">
             <div class="coluna">
                 <h2>Itens</h2>
                 <ul>
                     ${comanda.itens.map(item => `
-                        <li>${item.nome} (${item.quantidade}x) - R$ ${item.preco * item.quantidade} 
-                            <button class="remover-item" data-comanda-id="${idComanda}" data-item-id="${item.id}">Remover</button>
-                        </li>`).join('')}
+                        <li>
+                            ${item.nome} (<span id="quantity-${item.id}">${item.quantidade}</span>x) - R$ ${item.preco * item.quantidade}
+                            <div>
+                                <button class="quantity-btn" onclick="updateItemQuantity('${idComanda}', '${item.id}', 1)"><i class="fas fa-plus"></i></button>
+                                <button class="quantity-btn" onclick="updateItemQuantity('${idComanda}', '${item.id}', -1)"><i class="fas fa-minus"></i></button>
+                                <button class="remover-item" data-comanda-id="${idComanda}" data-item-id="${item.id}">Remover</button>
+                            </div>
+                        </li>
+                    `).join('')}
                 </ul>
             </div>
             <div class="coluna-center">
@@ -515,7 +618,7 @@ app.get('/comandas/:idComanda', (req, res) => {
                         ${options}
                     </select>
                     <input type="text" name="novoNomeItem" id="novoNomeItem" placeholder="Nome do item" style="display:none;">
-                    <input type="number" name="quantidade" id="quantidade" value="1" min="1" style="width: 60px;">
+                    <input type="number" name="quantidade" id="quantidade" value="1" min="1">
                     <input type="number" name="preco" id="preco" placeholder="Preço" style="display:none;">
                     <button type="submit">Adicionar Item</button>
                 </form>
@@ -523,7 +626,7 @@ app.get('/comandas/:idComanda', (req, res) => {
             <div class="coluna">
                 <h2>Pagar Conta</h2>
                 <form action="/comandas/${idComanda}/fechar" method="post">
-                    <label for="valorPagar">Valor Total a Pagar:</label>
+                    <label for="valorPagar">Valor Total a Pagar: R$ ${calcularValorTotal(comanda).toFixed(2)}</label>
                     <input type="number" name="valorPagar" id="valorPagar" value="${calcularValorTotal(comanda).toFixed(2)}" min="0.01" step="0.01" readonly>
                     <label for="metodoPagamento">Forma de Pagamento:</label>
                     <select name="metodoPagamento" id="metodoPagamento">
@@ -542,16 +645,63 @@ app.get('/comandas/:idComanda', (req, res) => {
         <br>
         <a href="/" class="comanda-link">Voltar para lista de comandas</a>
         <script>
+            function updateItemQuantity(comandaId, itemId, increment) {
+                const quantityDisplay = document.getElementById('quantity-' + itemId);
+                let newQuantity = parseInt(quantityDisplay.textContent) + increment; // Usando textContent para pegar apenas o texto
+        
+                if (newQuantity < 1) {
+                    // Confirmação para excluir o item se a quantidade for reduzida a zero
+                    if (confirm('Tem certeza que deseja remover este item?')) {
+                        removeItem(comandaId, itemId);
+                    } else {
+                        // Se o usuário cancelar, não fazer nada
+                        return;
+                    }
+                } else {
+                    // Atualizar a quantidade na interface do usuário imediatamente
+                    quantityDisplay.textContent = newQuantity; // Atualiza apenas o número, sem adicionar 'x'
+        
+                    // Enviar a atualização para o servidor
+                    fetch('/comandas/' + comandaId + '/itens/' + itemId + '/updateQuantity', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ newQuantity })
+                    }).then(response => {
+                        if (!response.ok) {
+                            console.error('Erro ao atualizar quantidade:', response.statusText);
+                            throw new Error('Falha ao atualizar a quantidade do item.');
+                        }
+                        location.reload(); // Recarregar a página para refletir a mudança
+                    }).catch(error => {
+                        alert('Erro ao atualizar a quantidade do item: ' + error.message);
+                    });
+                }
+            }
+        
+            function removeItem(comandaId, itemId) {
+                fetch('/comandas/' + comandaId + '/itens/' + itemId, {
+                    method: 'DELETE'
+                }).then(response => {
+                    if (!response.ok) {
+                        console.error('Erro ao remover item:', response.statusText);
+                        throw new Error('Falha ao remover o item.');
+                    }
+                    location.reload(); // Recarregar a página após remover o item
+                }).catch(error => {
+                    alert('Erro ao remover o item: ' + error.message);
+                });
+            }
+
             document.querySelectorAll('.remover-item').forEach(button => {
                 button.addEventListener('click', () => {
                     const comandaId = button.getAttribute('data-comanda-id');
                     const itemId = button.getAttribute('data-item-id');
                     fetch('/comandas/' + comandaId + '/itens/' + itemId, {
                         method: 'DELETE'
-                    })
-                    .then(response => {
+                    }).then(response => {
                         if (response.ok) {
-                            // Atualizar a página após a remoção do item
                             location.reload();
                         }
                     });
@@ -571,6 +721,30 @@ app.get('/comandas/:idComanda', (req, res) => {
     `);
 });
 
+app.post('/comandas/:idComanda/itens/:idItem/updateQuantity', (req, res) => {
+    const { idComanda, idItem } = req.params;
+    const { newQuantity } = req.body;
+
+    let comanda = comandas.find(com => com.id === idComanda);
+    if (!comanda) {
+        return res.status(404).send('Comanda não encontrada');
+    }
+
+    let item = comanda.itens.find(it => it.id === idItem);
+    if (!item) {
+        return res.status(404).send('Item não encontrado');
+    }
+
+    if (newQuantity < 1) {
+        const itemIndex = comanda.itens.findIndex(it => it.id === idItem);
+        comanda.itens.splice(itemIndex, 1); // Remover item se a quantidade for zero
+    } else {
+        item.quantidade = newQuantity; // Atualizar quantidade
+    }
+
+    res.status(200).send('Quantidade atualizada');
+});
+
 app.post('/comandas/:idComanda/rachar', (req, res) => {
     const { idComanda } = req.params;
     const comanda = comandas.find(comanda => comanda.id === idComanda);
@@ -579,7 +753,7 @@ app.post('/comandas/:idComanda/rachar', (req, res) => {
     }
 
     const valorTotalComanda = calcularValorTotal(comanda);
-    const pagamentoOptions = ['dinheiro', 'pix', 'cartao_credito', 'debito'].map(metodo => `<option value="${metodo}">${metodo}</option>`).join('');
+    const pagamentoOptions = ['Dinheiro', 'PIX', 'Crédito', 'Débito'].map(metodo => `<option value="${metodo}">${metodo}</option>`).join('');
 
     res.send(`
         <h1>Rachar Conta</h1>
@@ -631,65 +805,40 @@ app.post('/comandas/:idComanda/rachar', (req, res) => {
 
 app.post('/comandas/:idComanda/pagar', (req, res) => {
     const { idComanda } = req.params;
-    // Lógica para fechar a comanda e processar o pagamento
-    res.send('Comanda paga com sucesso!');
-});
+    const { valorPagar, metodoPagamento } = req.body;
+    const comanda = comandas.find(comanda => comanda.id === idComanda);
 
-app.post('/comandas/:idComanda/pagar', (req, res) => {
-    const { idComanda } = req.params;
-    const comandaIndex = comandas.findIndex(comanda => comanda.id === idComanda);
-
-    if (comandaIndex === -1) {
+    if (!comanda) {
         return res.status(404).send('Comanda não encontrada');
     }
 
-    const comanda = comandas[comandaIndex];
+    const valorPagarFloat = parseFloat(valorPagar);
+    const valorRestante = calcularValorRestante(comanda);
 
-    // Verificando se a comanda está aberta para permitir o pagamento
-    if (comanda.status === 'aberta') {
-        const valorTotalComanda = calcularValorTotal(comanda);
-        let valorPagoTotal = 0;
-
-        // Calculando o valor total já pago
-        if (comanda.hasOwnProperty('pagamentos')) {
-            valorPagoTotal = comanda.pagamentos.reduce((total, pagamento) => total + pagamento.valor, 0);
-        }
-
-        // Pegando os dados dos pagamentos do corpo da requisição
-        for (let i = 1; i <= req.body.numPagamentos; i++) {
-            const valor = parseFloat(req.body[`valor${i}`]);
-            const metodoPagamento = req.body[`metodoPagamento${i}`];
-
-            if (!isNaN(valor) && valor > 0) {
-                // Verificando se o valor do pagamento não excede o valor total da comanda
-                if (valorPagoTotal + valor <= valorTotalComanda) {
-                    if (!comanda.hasOwnProperty('pagamentos')) {
-                        comanda.pagamentos = [];
-                    }
-                    comanda.pagamentos.push({ valor, metodoPagamento });
-                    valorPagoTotal += valor;
-                } else {
-                    return res.status(400).send('O valor do pagamento excede o valor total da comanda');
-                }
-            } else {
-                return res.status(400).send('Valor de pagamento inválido');
-            }
-        }
-
-        // Verificando se o valor total da comanda foi pago
-        if (valorPagoTotal === valorTotalComanda) {
-            // Atualizando o status da comanda para fechada
-            comanda.status = 'fechada';
-            // Redirecionando para a página principal
-            return res.redirect('/');
-        } else {
-            return res.status(400).send('O valor total da comanda ainda não foi pago');
-        }
-    } else {
-        return res.status(400).send('A comanda já está fechada');
+    if (isNaN(valorPagarFloat) || valorPagarFloat <= 0) {
+        return res.status(400).send('Valor a pagar inválido');
     }
-});
 
+    if (valorPagarFloat > valorRestante) {
+        return res.status(400).send('Valor a pagar excede o valor restante na comanda');
+    }
+
+    if (!comanda.pagamentos) {
+        comanda.pagamentos = [];
+    }
+
+    comanda.pagamentos.push({
+        valor: valorPagarFloat,
+        metodo: metodoPagamento
+    });
+
+    // Verifica se o total pago agora é igual ou maior que o valor total da comanda
+    if (calcularValorRestante(comanda) <= 0) {
+        comanda.status = 'fechada'; // Atualiza o status para fechada
+    }
+
+    res.redirect('/'); // Redireciona para a tela inicial
+});
 
 // Rota para reabrir uma comanda fechada
 app.post('/comandas/:idComanda/reabrir', (req, res) => {
@@ -769,8 +918,6 @@ app.post('/comandas/:idComanda/fechar', (req, res) => {
     comanda.metodoPagamento = metodoPagamento;
     const valorTotalVendido = comanda.valorTotal;
 
-    // Aqui você pode adicionar lógica para exportar os dados para um arquivo txt
-
     // Redireciona o usuário de volta para a página inicial após fechar a comanda
     res.redirect('/'); // Redireciona para a página inicial
 
@@ -781,53 +928,25 @@ app.post('/comandas/:idComanda/fechar', (req, res) => {
 // Função para exportar as informações da comanda para um arquivo TXT
 function exportarParaTxt(comanda) {
     const dataAtual = new Date();
-    const horaAtual = dataAtual.getHours();
-    // Verifica se a hora atual é antes das 4 da manhã
-    if (horaAtual < 4) {
-        dataAtual.setDate(dataAtual.getDate() - 1); // Retrocede um dia
-    }
     const dataFormatada = `${dataAtual.getDate()}-${dataAtual.getMonth() + 1}-${dataAtual.getFullYear()}`;
     const nomeArquivo = `comanda_${comanda.id}_${dataFormatada}.txt`;
-    const diretorio = './registros'; // O diretório já está definido diretamente
+    const diretorio = './registros';
     const caminhoArquivo = path.join(diretorio, nomeArquivo);
 
-    // Verifica se a comanda foi rachada entre várias pessoas
-    if (comanda.numeroPessoas) {
-        conteudo += `Rachado entre ${comanda.numeroPessoas} pessoas\n`;
+    if (!fs.existsSync(diretorio)) {
+        fs.mkdirSync(diretorio);
     }
 
-    // Verifica se foi utilizada uma segunda forma de pagamento
-    if (comanda.segundoMetodoPagamento) {
-        conteudo += `Segunda Forma de Pagamento: ${comanda.segundoMetodoPagamento}\n`;
-    }
-
-    // Escrever informações da comanda no arquivo
     let conteudo = `Comanda de ${comanda.nomeCliente}`;
-    if (!comanda.fechada) {
-        conteudo += ' (ABERTA)';
+    if (comanda.pagamentos && comanda.pagamentos.length > 1) {
+        conteudo += ` - Rachada em ${comanda.pagamentos.length}x`;
     }
-    conteudo += ` - ${dataFormatada}\n`;
+    conteudo += ` - Valor Total: R$ ${calcularValorTotal(comanda).toFixed(2)}\n`;
     conteudo += '----------------------------------------\n';
-    let valorTotal = 0; // Variável para calcular o valor total da comanda
-    for (const item of comanda.itens) {
-        if (item.quantidade > 0) { // Considera apenas os itens vendidos (com quantidade maior que zero)
-            const valorTotalItem = item.preco * item.quantidade; // Calcula o valor total do item multiplicando o preço pela quantidade
-            conteudo += `${item.nome} (Quantidade: ${item.quantidade}) - R$ ${valorTotalItem.toFixed(2)}\n`; // Adiciona a quantidade e o valor total multiplicado pela quantidade no arquivo TXT
-            valorTotal += valorTotalItem; // Adiciona o valor total do item ao valor total da comanda
-        }
-    }
-    conteudo += '----------------------------------------\n';
-    conteudo += `Valor Total: R$ ${valorTotal.toFixed(2)}\n`; // Adiciona o valor total da comanda
-    if (comanda.fechada) { // Se a comanda estiver fechada, adiciona a forma de pagamento
-        conteudo += `Método de Pagamento: ${comanda.metodoPagamento}\n`;
-    }
 
-    // Escrever no arquivo
     fs.writeFileSync(caminhoArquivo, conteudo);
-
     return caminhoArquivo;
 }
-
 
 // Rota para exportar as comandas para um arquivo txt
 app.get('/exportar-txt', (req, res) => {
@@ -858,24 +977,32 @@ app.get('/exportar', (req, res) => {
     const arquivo = `registros_${data.getFullYear()}_${data.getMonth() + 1}_${data.getDate()}.txt`;
     const caminhoCompleto = `${pasta}/${arquivo}`;
 
-    // Verifica se a pasta 'registros' existe, se não, cria
     if (!fs.existsSync(pasta)) {
         fs.mkdirSync(pasta);
     }
 
     let conteudo = '';
     let totalVendido = 0;
-    let totalPorPagamento = { dinheiro: 0, pix: 0, cartao_credito: 0, debito: 0 };
+    let totalPorPagamento = { Dinheiro: 0, PIX: 0, Crédito: 0, Débito: 0 };
 
     // Adiciona informações de cada comanda ao conteúdo do arquivo
     comandas.forEach(comanda => {
-        conteudo += `Comanda de ${comanda.nomeCliente} - Valor Total: R$ ${calcularValorTotal(comanda).toFixed(2)} - Método de Pagamento: ${comanda.metodoPagamento}\n`;
+        let valorTotalComanda = calcularValorTotal(comanda);
+        conteudo += `Comanda de ${comanda.nomeCliente}`;
+        if (comanda.pagamentos && comanda.pagamentos.length > 1) {
+            conteudo += ` - Rachada em ${comanda.pagamentos.length}x`; // Adiciona a informação sobre a comanda ser rachada
+        }
+        conteudo += ` - Valor Total: R$ ${valorTotalComanda.toFixed(2)}\n`;
         comanda.itens.forEach(item => {
-            conteudo += `${item.nome} (Quantidade: ${item.quantidade}) - R$ ${item.total.toFixed(2)}\n`; // Adiciona a quantidade de itens e o valor total do item multiplicado pela quantidade no arquivo TXT
-            totalVendido += item.total;
+            conteudo += `${item.nome} (Quantidade: ${item.quantidade}) - R$ ${(item.preco * item.quantidade).toFixed(2)}\n`;
+            totalVendido += item.preco * item.quantidade;
 
             // Adiciona o valor ao total por forma de pagamento
-            totalPorPagamento[comanda.metodoPagamento] += item.total;
+            if (comanda.pagamentos) {
+                comanda.pagamentos.forEach(pagamento => {
+                    totalPorPagamento[pagamento.metodo] = (totalPorPagamento[pagamento.metodo] || 0) + pagamento.valor;
+                });
+            }
         });
         conteudo += '\n';
     });
@@ -889,16 +1016,8 @@ app.get('/exportar', (req, res) => {
         conteudo += `${metodo}: R$ ${valor.toFixed(2)}\n`;
     });
 
-    // Escreve o conteúdo no arquivo
-    fs.writeFile(caminhoCompleto, conteudo, err => {
-        if (err) {
-            return res.status(500).send('Erro ao exportar as informações');
-        }
-        res.send(`
-            Informações exportadas com sucesso para ${caminhoCompleto}<br>
-            <a href="/">Voltar para a lista de comandas</a>
-        `);
-    });
+    // Após salvar o arquivo, em vez de enviar o arquivo:
+    res.json({ success: true, message: "Dados exportados com sucesso para 'caminho_do_arquivo.txt'" });
 });
 
 // Rota para alterar o nome de uma comanda
@@ -962,13 +1081,13 @@ app.delete('/excluir-comanda/:idComanda', (req, res) => {
 // Função para definir a cor da comanda fechada de acordo com o método de pagamento
 function definirCorComanda(comanda) {
     switch (comanda.metodoPagamento) {
-        case 'cartao_credito':
+        case 'Crédito':
             return 'azul';
-        case 'dinheiro':
+        case 'Dinheiro':
             return 'verde';
-        case 'debito':
+        case 'Débito':
             return 'laranja';
-        case 'pix':
+        case 'PIX':
             return 'ciano';
         default:
             return 'cinza';
